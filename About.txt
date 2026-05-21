@@ -1,0 +1,21 @@
+customerID           PK  
+gender               If is male or female  
+SeniorCitizen        If it's a senior citizen or not (1,0)  
+Partner              If has partner (yes,no)  
+Dependents           If has dependents (yes,no)  
+tenure               Number of months with company  
+PhoneService         If has phone service (yes,no)  
+MultipleLines        If has multiple lines (yes,no, no phone service)  
+InternetService      customer provider (DSL, Fiber, no)  
+OnlineSecurity       If has online security (yes,no, no internet service)  
+OnlineBackup         If has online backup (yes,no, no internet service)  
+DeviceProtection     If has device protection (yes,no, no internet service)  
+TechSupport          If has tech support (yes,no, no internet service)  
+StreamingTV          If has streaming TV (yes,no, no internet service)  
+StreamingMovies      If has streaming movies (yes,no, no internet service)  
+Contract             Term of contract (month-to-month, one year, two year)  
+PaperlessBilling     If the billing is paperless or not (yes, no)  
+PaymentMethod        Customer's payment method (Electronic check, Mailed check, Bank transfer (automatic), Credit card )  
+MonthlyCharges       The amount charged to the customer monthly  
+TotalCharges         The amount charged to the customer total  
+Churn                objective: if it's yes or no to churn
