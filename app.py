@@ -30,12 +30,12 @@ def resolve_data_path() -> str:
     for file_name in DATA_FILES:
         if Path(file_name).exists():
             return file_name
-    raise FileNotFoundError("Arquivo de dados nao encontrado no diretorio do projeto.")
+    raise FileNotFoundError("Data file not found in the project directory.")
 
 
 @st.cache_data
 def load_data() -> pd.DataFrame:
-    # Cache de dados puros para acelerar EDA sem retrain do modelo.
+    # Cache raw data to speed up EDA without retraining the model.
     df = pd.read_csv(resolve_data_path())
     df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
     df["TotalCharges"] = df["TotalCharges"].fillna(df["TotalCharges"].median())
@@ -45,7 +45,7 @@ def load_data() -> pd.DataFrame:
 
 @st.cache_resource
 def load_and_train_model() -> dict:
-    # Treina uma unica vez: pipeline + calibracao por sigmoid para probabilidade confiavel.
+    # Train once: pipeline + sigmoid calibration for reliable probabilities.
     df = load_data().copy()
     model_df = df.drop(columns=["customerID"]).copy()
     model_df["Churn"] = model_df["Churn"].map({"Yes": 1, "No": 0})
@@ -78,7 +78,7 @@ def load_and_train_model() -> dict:
     test_pred = (test_proba >= CHURN_THRESHOLD).astype(int)
     cm = confusion_matrix(y_test, test_pred)
 
-    # Usa media dos coeficientes dos folds para leitura executiva de importancia.
+    # Use average fold coefficients for an executive-level importance view.
     coef_stack = []
     feature_names = None
     for clf in calibrated_model.calibrated_classifiers_:
@@ -139,7 +139,7 @@ def clean_feature_name(name: str) -> str:
 
 
 def render_eda_page(df: pd.DataFrame):
-    st.header("📊 Visao Geral e Analise")
+    st.header("📊 Overview and Analysis")
 
     churn_rate = (df["Churn"].eq("Yes").mean()) * 100
     total_customers = len(df)
@@ -147,23 +147,23 @@ def render_eda_page(df: pd.DataFrame):
     avg_tenure = df["tenure"].mean()
 
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Total de Clientes", f"{total_customers:,}".replace(",", "."))
-    k2.metric("Taxa de Churn", f"{churn_rate:.2f}%")
-    k3.metric("Ticket Medio Mensal", f"${avg_monthly:.2f}")
-    k4.metric("Tenure Medio", f"{avg_tenure:.1f} meses")
+    k1.metric("Total Customers", f"{total_customers:,}".replace(",", "."))
+    k2.metric("Churn Rate", f"{churn_rate:.2f}%")
+    k3.metric("Average Monthly Bill", f"${avg_monthly:.2f}")
+    k4.metric("Average Tenure", f"{avg_tenure:.1f} months")
 
     c1, c2 = st.columns(2)
     with c1:
         churn_dist = df["Churn"].value_counts().reset_index()
-        churn_dist.columns = ["Churn", "Clientes"]
+        churn_dist.columns = ["Churn", "Customers"]
         fig_donut = px.pie(
             churn_dist,
             names="Churn",
-            values="Clientes",
+            values="Customers",
             hole=0.55,
             color="Churn",
             color_discrete_map={"Yes": "#d62728", "No": "#1f77b4"},
-            title="Distribuicao do Churn",
+            title="Churn Distribution",
         )
         st.plotly_chart(fig_donut, use_container_width=True)
 
@@ -176,13 +176,13 @@ def render_eda_page(df: pd.DataFrame):
             nbins=30,
             opacity=0.7,
             color_discrete_map={"Yes": "#d62728", "No": "#1f77b4"},
-            title="Distribuicao de Tenure por Churn",
+            title="Tenure Distribution by Churn",
         )
         st.plotly_chart(fig_hist, use_container_width=True)
 
     c3, c4 = st.columns(2)
     with c3:
-        fig_box = px.box(
+        fig_box_monthly = px.box(
             df,
             x="Churn",
             y="MonthlyCharges",
@@ -190,49 +190,59 @@ def render_eda_page(df: pd.DataFrame):
             color_discrete_map={"Yes": "#d62728", "No": "#1f77b4"},
             title="MonthlyCharges vs Churn",
         )
-        st.plotly_chart(fig_box, use_container_width=True)
+        st.plotly_chart(fig_box_monthly, use_container_width=True)
 
     with c4:
-        st.markdown("### Drivers de Churn por Segmento")
-        cols = ["Contract", "InternetService", "PaymentMethod"]
-        for col in cols:
-            churn_by_col = (
-                df.groupby(col, as_index=False)["Churn"]
-                .apply(lambda s: (s == "Yes").mean() * 100)
-                .rename(columns={"Churn": "ChurnRate"})
-                .sort_values("ChurnRate", ascending=False)
-            )
-            fig_bar = px.bar(
-                churn_by_col,
-                x=col,
-                y="ChurnRate",
-                color="ChurnRate",
-                color_continuous_scale="Reds",
-                title=f"Taxa de Churn por {col}",
-                labels={"ChurnRate": "Taxa de Churn (%)"},
-            )
-            fig_bar.update_layout(coloraxis_showscale=False)
-            st.plotly_chart(fig_bar, use_container_width=True)
+        fig_box_total = px.box(
+            df,
+            x="Churn",
+            y="TotalCharges",
+            color="Churn",
+            color_discrete_map={"Yes": "#d62728", "No": "#1f77b4"},
+            title="TotalCharges vs Churn",
+        )
+        st.plotly_chart(fig_box_total, use_container_width=True)
+
+    st.markdown("### Churn Drivers by Segment")
+    cols = ["Contract", "InternetService", "PaymentMethod"]
+    for col in cols:
+        churn_by_col = (
+            df.groupby(col, as_index=False)["Churn"]
+            .apply(lambda s: (s == "Yes").mean() * 100)
+            .rename(columns={"Churn": "ChurnRate"})
+            .sort_values("ChurnRate", ascending=False)
+        )
+        fig_bar = px.bar(
+            churn_by_col,
+            x=col,
+            y="ChurnRate",
+            color="ChurnRate",
+            color_continuous_scale="Reds",
+            title=f"Churn Rate by {col}",
+            labels={"ChurnRate": "Churn Rate (%)"},
+        )
+        fig_bar.update_layout(coloraxis_showscale=False)
+        st.plotly_chart(fig_bar, use_container_width=True)
 
 
 def render_model_page(artifacts: dict):
-    st.header("🤖 Desempenho do Modelo e Regras")
+    st.header("🤖 Model Performance and Rules")
     st.markdown(
         """
-Modelo escolhido: Regressao Logistica com calibracao de probabilidade via sigmoid.
+Selected model: Logistic Regression with sigmoid probability calibration.
 
-Regra de negocio aplicada: threshold fixo em 0.15.
+Applied business rule: fixed threshold at 0.15.
 
-- Custo de falso negativo = 5x custo de falso positivo
-- Alvo operacional de recall = 75%
-- Decisao: probabilidade >= 0.15 indica risco de churn
+- False negative cost = 5x false positive cost
+- Operational recall target = 75%
+- Decision rule: probability >= 0.15 indicates churn risk
 """
     )
 
     importance_df = artifacts["importance_df"].copy()
     top_imp = importance_df.head(20).copy()
     top_imp["feature_clean"] = top_imp["feature"].apply(clean_feature_name)
-    top_imp["direction"] = np.where(top_imp["coefficient"] >= 0, "Aumenta risco", "Reduz risco")
+    top_imp["direction"] = np.where(top_imp["coefficient"] >= 0, "Increases risk", "Reduces risk")
 
     fig_imp = px.bar(
         top_imp.sort_values("coefficient"),
@@ -240,9 +250,9 @@ Regra de negocio aplicada: threshold fixo em 0.15.
         y="feature_clean",
         orientation="h",
         color="direction",
-        color_discrete_map={"Aumenta risco": "#d62728", "Reduz risco": "#1f77b4"},
-        title="Importancia das Variaveis (coeficientes)",
-        labels={"coefficient": "Coeficiente", "feature_clean": "Feature"},
+        color_discrete_map={"Increases risk": "#d62728", "Reduces risk": "#1f77b4"},
+        title="Variable Importance (coefficients)",
+        labels={"coefficient": "Coefficient", "feature_clean": "Feature"},
     )
     st.plotly_chart(fig_imp, use_container_width=True)
 
@@ -250,37 +260,37 @@ Regra de negocio aplicada: threshold fixo em 0.15.
         top_imp[["feature_clean", "coefficient", "abs_coefficient", "direction"]].rename(
             columns={
                 "feature_clean": "Feature",
-                "coefficient": "Coeficiente",
-                "abs_coefficient": "|Coeficiente|",
-                "direction": "Direcao",
+                "coefficient": "Coefficient",
+                "abs_coefficient": "|Coefficient|",
+                "direction": "Direction",
             }
         ),
         use_container_width=True,
     )
 
     st.info(
-        "Threshold 0.15 prioriza recall para identificar churners cedo. "
-        "Mesmo com mais falsos positivos, reduzimos perda de clientes de alto valor."
+        "Threshold 0.15 prioritizes recall to identify churners early. "
+        "Even with more false positives, it reduces loss of high-value customers."
     )
 
     cm = artifacts["confusion_matrix"]
     cm_df = pd.DataFrame(
         cm,
-        index=["Real: No Churn", "Real: Churn"],
-        columns=["Predito: No Churn", "Predito: Churn"],
+        index=["Actual: No Churn", "Actual: Churn"],
+        columns=["Predicted: No Churn", "Predicted: Churn"],
     )
     fig_cm = px.imshow(
         cm_df,
         text_auto=True,
         color_continuous_scale="Blues",
-        title="Matriz de Confusao (threshold = 0.15)",
+        title="Confusion Matrix (threshold = 0.15)",
     )
     st.plotly_chart(fig_cm, use_container_width=True)
 
 
 def render_simulator_page(artifacts: dict):
-    st.header("🔮 Simulador de Churn")
-    st.markdown("Preencha os dados de um cliente e clique em Prever Risco.")
+    st.header("🔮 Churn Simulator")
+    st.markdown("Fill in customer data and click Predict Risk.")
 
     model = artifacts["model"]
     defaults = artifacts["defaults"]
@@ -335,7 +345,7 @@ def render_simulator_page(artifacts: dict):
                 step=num_limits["TotalCharges"]["step"],
             )
 
-        submitted = st.form_submit_button("Prever Risco")
+        submitted = st.form_submit_button("Predict Risk")
 
     if not submitted:
         return
@@ -343,16 +353,16 @@ def render_simulator_page(artifacts: dict):
     input_df = pd.DataFrame([user_input])[feature_order]
     churn_proba = float(model.predict_proba(input_df)[:, 1][0])
 
-    st.subheader("Probabilidade calibrada de churn")
+    st.subheader("Calibrated churn probability")
     st.progress(min(max(churn_proba, 0.0), 1.0))
-    st.caption(f"Probabilidade estimada: {churn_proba:.2%}")
+    st.caption(f"Estimated probability: {churn_proba:.2%}")
 
     gauge = go.Figure(
         go.Indicator(
             mode="gauge+number",
             value=churn_proba * 100,
             number={"suffix": "%"},
-            title={"text": "Risco de Churn"},
+            title={"text": "Churn Risk"},
             gauge={
                 "axis": {"range": [0, 100]},
                 "bar": {"color": "#d62728" if churn_proba >= CHURN_THRESHOLD else "#1f77b4"},
@@ -364,15 +374,7 @@ def render_simulator_page(artifacts: dict):
             },
         )
     )
-    gauge.update_layout(height=280, margin=dict(l=30, r=30, t=40, b=20))
-    st.plotly_chart(gauge, use_container_width=True)
-
-    if churn_proba >= CHURN_THRESHOLD:
-        st.error("ALTO RISCO DE CHURN: Acao de retencao recomendada!")
-    else:
-        st.success("Cliente Retido: Baixo Risco.")
-
-    # Explicabilidade local com contribuicoes lineares no espaco transformado.
+    # Local explainability with linear contributions in transformed feature space.
     fold_estimator = model.calibrated_classifiers_[0].estimator
     preprocess = fold_estimator.named_steps["preprocess"]
     transformed = preprocess.transform(input_df)
@@ -387,16 +389,39 @@ def render_simulator_page(artifacts: dict):
     contrib_df = pd.DataFrame(
         {
             "Feature": [clean_feature_name(n) for n in feature_names],
-            "Contribuicao": transformed * mean_coef,
+            "Contribution": transformed * mean_coef,
         }
     )
-    contrib_df = contrib_df[np.abs(contrib_df["Contribuicao"]) > 1e-6].copy()
-    contrib_df["Impacto"] = np.where(contrib_df["Contribuicao"] > 0, "Aumenta risco", "Reduz risco")
-    contrib_df = contrib_df.reindex(contrib_df["Contribuicao"].abs().sort_values(ascending=False).index).head(10)
+    contrib_df = contrib_df[np.abs(contrib_df["Contribution"]) > 1e-6].copy()
+    contrib_df["Impact"] = np.where(contrib_df["Contribution"] > 0, "Increases risk", "Reduces risk")
+    contrib_df = contrib_df.reindex(contrib_df["Contribution"].abs().sort_values(ascending=False).index).head(10)
 
-    with st.expander("Ver features que mais influenciaram esta previsao"):
+    contrib_fig = px.bar(
+        contrib_df.sort_values("Contribution"),
+        x="Contribution",
+        y="Feature",
+        orientation="h",
+        color="Impact",
+        color_discrete_map={"Increases risk": "#d62728", "Reduces risk": "#1f77b4"},
+        title="Top Feature Contributions",
+    )
+    contrib_fig.update_layout(height=280, margin=dict(l=20, r=20, t=40, b=20))
+
+    chart_col1, chart_col2 = st.columns(2)
+    with chart_col1:
+        gauge.update_layout(height=280, margin=dict(l=30, r=30, t=40, b=20))
+        st.plotly_chart(gauge, use_container_width=True)
+    with chart_col2:
+        st.plotly_chart(contrib_fig, use_container_width=True)
+
+    if churn_proba >= CHURN_THRESHOLD:
+        st.error("HIGH CHURN RISK: Retention action recommended!")
+    else:
+        st.success("Customer Retained: Low Risk.")
+
+    with st.expander("View features that most influenced this prediction"):
         if contrib_df.empty:
-            st.write("Nenhuma contribuicao relevante encontrada para este perfil.")
+            st.write("No relevant contribution found for this profile.")
         else:
             st.dataframe(contrib_df, use_container_width=True)
 
@@ -404,31 +429,31 @@ def render_simulator_page(artifacts: dict):
 def main():
     st.set_page_config(page_title="Customer Churn Intelligence", layout="wide")
     st.title("Customer Churn Intelligence Dashboard")
-    st.caption("Regressao Logistica Calibrada | Threshold fixo de decisao = 0.15")
+    st.caption("Exploratory Data Analysis, Model Insights, and Churn Simulation for Telco Customers | Developed by Anderson Silva")
 
     df = load_data()
     artifacts = load_and_train_model()
 
     with st.sidebar:
-        st.header("Navegacao")
+        st.header("Navigation")
         page = st.radio(
-            "Selecione a pagina",
+            "Select a page",
             [
-                "📊 Visao Geral e Analise",
-                "🤖 Desempenho do Modelo e Regras",
-                "🔮 Simulador de Churn",
+                "📊 Overview and Analysis",
+                "🤖 Model Performance and Rules",
+                "🔮 Churn Simulator",
             ],
         )
         st.markdown("---")
-        st.markdown("### Regra de Decisao")
-        st.metric("Threshold Operacional", f"{CHURN_THRESHOLD:.2f}")
+        st.markdown("### Decision Rule")
+        st.metric("Operational Threshold", f"{CHURN_THRESHOLD:.2f}")
         st.caption(
-            f"FN:FP = {int(FN_COST)}:{int(FP_COST)} | Recall alvo: {int(RECALL_TARGET * 100)}%"
+            f"FN:FP = {int(FN_COST)}:{int(FP_COST)} | Recall target: {int(RECALL_TARGET * 100)}%"
         )
 
-    if page == "📊 Visao Geral e Analise":
+    if page == "📊 Overview and Analysis":
         render_eda_page(df)
-    elif page == "🤖 Desempenho do Modelo e Regras":
+    elif page == "🤖 Model Performance and Rules":
         render_model_page(artifacts)
     else:
         render_simulator_page(artifacts)
